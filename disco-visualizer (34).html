@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DISCO VISUALIZER</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Anton&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#000; overflow:hidden; width:100vw; height:100vh; font-family:'Bebas Neue',sans-serif; cursor:none; }
+  canvas { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; }
+  #ui { position:fixed; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:10; background:rgba(0,0,0,0.88); transition:opacity 0.8s ease; }
+  #ui.hidden { opacity:0; pointer-events:none; }
+  .ui-title { font-family:'Anton',sans-serif; font-size:clamp(48px,10vw,120px); letter-spacing:0.15em; background:linear-gradient(135deg,#ff2d78,#ff9a00,#ffe100,#00f5a0,#00d9f5,#b86bff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; text-align:center; line-height:1; margin-bottom:16px; animation:pulse-title 2s ease-in-out infinite; }
+  @keyframes pulse-title { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.3)} }
+  .ui-sub { font-size:clamp(14px,2.5vw,28px); color:rgba(255,255,255,0.45); letter-spacing:0.3em; margin-bottom:48px; }
+  .start-btn { font-family:'Bebas Neue',sans-serif; font-size:clamp(18px,3vw,32px); letter-spacing:0.3em; color:#000; background:linear-gradient(135deg,#ff2d78,#b86bff); border:none; padding:18px 64px; border-radius:100px; cursor:pointer; transition:transform 0.15s,box-shadow 0.15s; box-shadow:0 0 40px rgba(255,45,120,0.5),0 0 80px rgba(184,107,255,0.3); }
+  .start-btn:hover { transform:scale(1.05); }
+  .err-msg { margin-top:24px; color:#ff4444; font-size:clamp(12px,1.8vw,18px); letter-spacing:0.2em; display:none; text-align:center; padding:0 20px; }
+  #hud { position:fixed; top:24px; right:28px; z-index:20; display:flex; gap:10px; opacity:0; transition:opacity 0.5s; }
+  #hud.show { opacity:1; }
+  .hud-btn { font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:0.2em; color:rgba(255,255,255,0.5); background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); padding:7px 14px; border-radius:6px; cursor:pointer; transition:all 0.2s; }
+  .hud-btn:hover,.hud-btn.active { color:#fff; background:rgba(255,255,255,0.12); border-color:rgba(255,255,255,0.3); }
+
+
+  /* ── Projection text overlay ── */
+  #overlay-text { position:fixed; left:0; right:0; z-index:999; pointer-events:none; text-align:center; padding:0 5vw; display:none; }
+  #overlay-text.pos-centre { top:50%; transform:translateY(-50%); }
+  #overlay-text.pos-top    { top:8%; }
+  #overlay-text.pos-bottom { bottom:12%; }
+  #overlay-text .ov-main {
+    font-family:'Anton',sans-serif; font-size:clamp(48px,9vw,130px);
+    letter-spacing:0.08em; line-height:1; display:block;
+    text-shadow: 0 0 40px rgba(255,255,255,0.8), 0 0 80px rgba(255,255,255,0.4), 3px 3px 0 #000, -1px -1px 0 #000;
+  }
+  #overlay-text .ov-sub {
+    font-family:'Bebas Neue',sans-serif; font-size:clamp(22px,4vw,56px);
+    letter-spacing:0.3em; display:block; margin-top:12px;
+    text-shadow: 0 0 20px rgba(255,255,255,0.6), 2px 2px 0 #000;
+  }
+  #overlay-text.colour-rainbow .ov-main { color:#fff; text-shadow: 0 0 40px #ff64c8, 0 0 80px #00d9f5, 3px 3px 0 #000; }
+  #overlay-text.colour-rainbow .ov-sub  { color:#ffec40; text-shadow: 0 0 20px #ffec40, 2px 2px 0 #000; }
+  #overlay-text.colour-white .ov-main  { color:#fff; }
+  #overlay-text.colour-white .ov-sub   { color:#ddd; }
+  #overlay-text.colour-gold .ov-main   { color:#ffe100; text-shadow: 0 0 40px #ff9a00, 0 0 80px #ffe100, 3px 3px 0 #000; }
+  #overlay-text.colour-gold .ov-sub    { color:#ff9a00; text-shadow: 0 0 20px #ff9a00, 2px 2px 0 #000; }
+  #overlay-text.colour-pink .ov-main   { color:#ff64c8; text-shadow: 0 0 40px #ff2d78, 0 0 80px #b86bff, 3px 3px 0 #000; }
+  #overlay-text.colour-pink .ov-sub    { color:#b86bff; text-shadow: 0 0 20px #b86bff, 2px 2px 0 #000; }
+  #overlay-text.colour-cyan .ov-main   { color:#00f5ff; text-shadow: 0 0 40px #00d9f5, 0 0 80px #00f5a0, 3px 3px 0 #000; }
+  #overlay-text.colour-cyan .ov-sub    { color:#00f5a0; text-shadow: 0 0 20px #00f5a0, 2px 2px 0 #000; }
+
+  @keyframes ov-fade  { from{opacity:0} to{opacity:1} }
+  @keyframes ov-slide { from{opacity:0;transform:translateY(calc(-50% + 40px))} to{opacity:1;transform:translateY(-50%)} }
+  @keyframes ov-slide-top { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes ov-pulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
+  @keyframes ov-glitch {
+    0%,100%{transform:translateY(-50%) skewX(0deg)}
+    5%{transform:translateY(-50%) skewX(4deg) translateX(-4px)}
+    10%{transform:translateY(-50%) skewX(-3deg) translateX(4px)}
+    15%{transform:translateY(-50%) skewX(0deg)}
+  }
+
+  /* ── Presenter panel ── */
+  #presenter-panel {
+    display:none; position:fixed; bottom:0; left:0; right:0; z-index:50;
+    background:rgba(8,4,20,0.97); border-top:1px solid rgba(255,255,255,0.12);
+    padding:18px 28px 20px; font-family:'Bebas Neue',sans-serif;
+  }
+  #pp-title { font-family:'Anton',sans-serif; font-size:16px; letter-spacing:0.3em; color:rgba(255,255,255,0.35); margin-bottom:14px; }
+  #pp-row { display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap; }
+  .pp-col { display:flex; flex-direction:column; flex:1; min-width:220px; }
+  .pp-col-right { max-width:220px; }
+  .pp-label { font-size:11px; letter-spacing:0.2em; color:rgba(255,255,255,0.35); margin-bottom:5px; }
+  #presenter-panel input[type=text] {
+    background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.15);
+    color:#fff; font-family:'Bebas Neue',sans-serif; font-size:17px; letter-spacing:0.1em;
+    padding:9px 12px; border-radius:6px; outline:none; width:100%;
+  }
+  #presenter-panel input[type=text]:focus { border-color:rgba(255,100,200,0.6); }
+  #presenter-panel select {
+    background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.15);
+    color:#fff; font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:0.1em;
+    padding:7px 10px; border-radius:6px; outline:none; width:100%; cursor:pointer;
+  }
+  #pp-colours { display:flex; gap:8px; margin-top:2px; flex-wrap:wrap; }
+  .pp-swatch { width:28px; height:28px; border-radius:50%; cursor:pointer; border:2px solid transparent; transition:border-color 0.2s; }
+  .pp-swatch.active { border-color:#fff; }
+  #pp-btns { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+  #pp-btns button { font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:0.2em; padding:9px 22px; border-radius:6px; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.07); color:#fff; cursor:pointer; transition:all 0.2s; }
+  #pp-btns button:hover { background:rgba(255,255,255,0.15); }
+  #pp-show { border-color:rgba(255,100,200,0.6) !important; color:#ff64c8 !important; }
+  #pp-show:hover { background:rgba(255,100,200,0.15) !important; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div class="ui-title">DISCO<br>VISUALIZER</div>
+  <div class="ui-sub">live music · real-time · mainstage</div>
+  <button class="start-btn" id="startBtn">TAP TO BEGIN</button>
+  <div class="err-msg" id="errMsg">MICROPHONE ACCESS DENIED<br><span style="font-size:0.75em;color:rgba(255,100,100,0.8)">Allow mic in your browser settings, then refresh</span></div>
+</div>
+<div id="hud">
+  <button class="hud-btn active" data-mode="full">FULL</button>
+  <button class="hud-btn" data-mode="bars">BARS</button>
+  <button class="hud-btn" data-mode="circle">CIRCLE</button>
+  <button class="hud-btn" data-mode="laser">LASER</button>
+  <button class="hud-btn" id="fsBtn">⛶ FULLSCREEN</button>
+</div>
+
+
+<!-- Text overlay shown on projection -->
+<div id="overlay-text"></div>
+
+<!-- Presenter panel (only on this screen) -->
+<div id="presenter-panel">
+  <div id="pp-title">PRESENTER MODE</div>
+  <div id="pp-row">
+    <div class="pp-col">
+      <label class="pp-label">MAIN TEXT</label>
+      <input id="pp-main" type="text" placeholder="e.g. HAPPY BIRTHDAY SARAH" maxlength="60">
+      <label class="pp-label" style="margin-top:10px">SUBTITLE</label>
+      <input id="pp-sub" type="text" placeholder="e.g. Table 3 to the dancefloor!" maxlength="80">
+    </div>
+    <div class="pp-col pp-col-right">
+      <label class="pp-label">POSITION</label>
+      <select id="pp-pos">
+        <option value="centre">Centre</option>
+        <option value="top">Top</option>
+        <option value="bottom">Bottom</option>
+      </select>
+      <label class="pp-label" style="margin-top:10px">ANIMATION</label>
+      <select id="pp-anim">
+        <option value="fade">Fade</option>
+        <option value="slide">Slide Up</option>
+        <option value="pulse">Pulse</option>
+        <option value="glitch">Glitch</option>
+      </select>
+      <label class="pp-label" style="margin-top:10px">COLOUR</label>
+      <div id="pp-colours">
+        <div class="pp-swatch active" data-colour="rainbow" style="background:linear-gradient(135deg,#ff2d78,#ffec40,#00f5a0,#00d9f5,#b86bff)"></div>
+        <div class="pp-swatch" data-colour="white" style="background:#fff"></div>
+        <div class="pp-swatch" data-colour="gold" style="background:linear-gradient(135deg,#ffe100,#ff9a00)"></div>
+        <div class="pp-swatch" data-colour="pink" style="background:linear-gradient(135deg,#ff2d78,#b86bff)"></div>
+        <div class="pp-swatch" data-colour="cyan" style="background:linear-gradient(135deg,#00d9f5,#00f5a0)"></div>
+      </div>
+    </div>
+  </div>
+  <div id="pp-btns">
+    <button id="pp-show">SHOW ON SCREEN</button>
+    <button id="pp-hide">HIDE</button>
+    <button id="pp-close">CLOSE PRESENTER</button>
+  </div>
+</div>
+
+<script>
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const ui=document.getElementById('ui'),hud=document.getElementById('hud');
+const errMsg=document.getElementById('errMsg'),startBtn=document.getElementById('startBtn');
+const fsBtn=document.getElementById('fsBtn');
+let W,H;
+function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+resize(); window.addEventListener('resize',resize);
+let audioCtx,analyser,freqData,waveData;
+let mode='full',tick=0,beatPulse=0,lastBeat=0,bpm=0,beatTimes=[],running=false;
+document.querySelectorAll('.hud-btn[data-mode]').forEach(b=>{
+  b.addEventListener('click',()=>{document.querySelectorAll('.hud-btn[data-mode]').forEach(x=>x.classList.remove('active'));b.classList.add('active');mode=b.dataset.mode;});
+});
+fsBtn.addEventListener('click',toggleFS);
+document.addEventListener('keydown',e=>{
+  if(e.key==='f'||e.key==='F') toggleFS();
+  if(e.key==='1') switchMode('full');
+  if(e.key==='2') switchMode('bars');
+  if(e.key==='3') switchMode('circle');
+  if(e.key==='4') switchMode('laser');
+});
+function switchMode(m){
+  mode=m;
+  document.querySelectorAll('.hud-btn[data-mode]').forEach(b=>{
+    b.classList.toggle('active', b.dataset.mode===m);
+  });
+}
+function toggleFS(){if(!document.fullscreenElement)document.documentElement.requestFullscreen().catch(()=>{});else document.exitFullscreen();}
+startBtn.addEventListener('click',async()=>{
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    analyser=audioCtx.createAnalyser();
+    analyser.fftSize=4096; analyser.smoothingTimeConstant=0.8;
+    audioCtx.createMediaStreamSource(stream).connect(analyser);
+    freqData=new Uint8Array(analyser.frequencyBinCount);
+    waveData=new Uint8Array(analyser.fftSize);
+    ui.classList.add('hidden'); hud.classList.add('show'); running=true;
+    requestAnimationFrame(draw);
+  }catch(e){errMsg.style.display='block';startBtn.textContent='TRY AGAIN';}
+});
+
+function getFreqBands(){
+  const n=freqData.length;
+  const band=(lo,hi)=>{let s=0,c=0;for(let i=Math.floor(lo*n);i<Math.floor(hi*n);i++){s+=freqData[i];c++;}return s/(c*255);};
+  return{sub:band(0,0.02),bass:band(0.02,0.06),mid:band(0.06,0.25),high:band(0.25,0.65)};
+}
+function detectBeat(bass){
+  const now=performance.now();
+  if(bass>0.55&&now-lastBeat>220){
+    beatPulse=1.0; beatTimes.push(now);
+    if(beatTimes.length>8)beatTimes.shift();
+    if(beatTimes.length>=2){const avg=(beatTimes[beatTimes.length-1]-beatTimes[0])/(beatTimes.length-1);bpm=Math.round(60000/avg);}
+    lastBeat=now;
+  }
+  beatPulse=Math.max(0,beatPulse-0.04);
+}
+
+const PARTICLES=Array.from({length:200},()=>({x:Math.random(),y:Math.random()+0.2,vx:(Math.random()-0.5)*0.003,vy:-(0.001+Math.random()*0.003),size:1+Math.random()*3,hue:Math.random()*360,life:Math.random(),maxLife:0.6+Math.random()*0.4,alpha:0}));
+const LASERS=Array.from({length:12},(_,i)=>({angle:(i/12)*Math.PI*2,speed:(0.008+Math.random()*0.012)*(Math.random()<0.5?1:-1),hue:(i/12)*360,width:1.5+Math.random()*2}));
+
+// ── Spotlights helper ──────────────────────────────────────────────────────
+function spotBeam(fx,fy,angle,hue,opacity,coneW,beamLen){
+  const g=ctx.createLinearGradient(0,0,0,beamLen);
+  g.addColorStop(0,`hsla(${hue},100%,90%,${opacity})`);
+  g.addColorStop(0.15,`hsla(${hue},100%,72%,${opacity*0.55})`);
+  g.addColorStop(0.5,`hsla(${hue},100%,55%,${opacity*0.13})`);
+  g.addColorStop(1,'transparent');
+  ctx.save();ctx.translate(fx,fy);ctx.rotate(angle);
+  ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(-1,0);ctx.lineTo(1,0);
+  ctx.lineTo(coneW,beamLen);ctx.lineTo(-coneW,beamLen);ctx.closePath();ctx.fill();ctx.restore();
+}
+function spotDot(){}
+
+function drawAllSpotlights(bands){
+  const bright=0.28+bands.bass*0.18+beatPulse*0.12;
+  const len=H*1.9;
+
+  // BG slow faded beams behind everything
+  [0.38,0.44,0.50,0.56,0.62].forEach((xf,i)=>{
+    const sway=Math.sin(tick*0.004+i*1.4)*0.15;
+    const hue=(tick*0.1+i*30+210)%360;
+    const op=0.06+bands.mid*0.03;
+    const g=ctx.createLinearGradient(0,0,0,len);
+    g.addColorStop(0,`hsla(${hue},30%,70%,${op})`);g.addColorStop(0.45,`hsla(${hue},25%,55%,${op*0.4})`);g.addColorStop(1,'transparent');
+    ctx.save();ctx.translate(xf*W,0);ctx.rotate(sway);
+    ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(-1,0);ctx.lineTo(1,0);ctx.lineTo(14,len);ctx.lineTo(-14,len);ctx.closePath();ctx.fill();ctx.restore();
+  });
+
+  // Top centre-left: minimal sway, lean left
+  [{xf:0.46,a:-0.18,s:0.04,sp:0.007},{xf:0.40,a:-0.30,s:0.05,sp:0.008},{xf:0.33,a:-0.44,s:0.06,sp:0.009}]
+  .forEach(({xf,a,s,sp},i)=>{const hue=(tick*0.6+i*45)%360;spotBeam(xf*W,0,a+Math.sin(tick*sp+i)*s,hue,bright,13,len);spotDot(xf*W,3,hue);});
+
+  // Top centre-right: mirror
+  [{xf:0.54,a:0.18,s:0.04,sp:0.007},{xf:0.60,a:0.30,s:0.05,sp:0.008},{xf:0.67,a:0.44,s:0.06,sp:0.009}]
+  .forEach(({xf,a,s,sp},i)=>{const hue=(tick*0.6+i*45+180)%360;spotBeam(xf*W,0,a+Math.sin(tick*sp+i+3)*s,hue,bright,13,len);spotDot(xf*W,3,hue);});
+
+  // Far left top: fast sweep
+  [{xf:0.25,a:-0.62,s:0.40,sp:0.032},{xf:0.16,a:-0.80,s:0.38,sp:0.035},{xf:0.08,a:-1.00,s:0.36,sp:0.030},{xf:0.02,a:-1.18,s:0.32,sp:0.038}]
+  .forEach(({xf,a,s,sp},i)=>{const hue=(tick*0.8+i*60+20)%360;spotBeam(xf*W,0,a+Math.sin(tick*sp+i*0.8)*s,hue,bright*1.1,14,len);spotDot(xf*W,3,hue);});
+
+  // Far right top: mirror
+  [{xf:0.75,a:0.62,s:0.40,sp:0.032},{xf:0.84,a:0.80,s:0.38,sp:0.035},{xf:0.92,a:1.00,s:0.36,sp:0.030},{xf:0.98,a:1.18,s:0.32,sp:0.038}]
+  .forEach(({xf,a,s,sp},i)=>{const hue=(tick*0.8+i*60+200)%360;spotBeam(xf*W,0,a+Math.sin(tick*sp+i*0.8+2)*s,hue,bright*1.1,14,len);spotDot(xf*W,3,hue);});
+
+  // Left wall: 5 fixtures, shoot right, fade before centre
+  [{yf:0.15,a:0.18,s:0.28,sp:0.022},{yf:0.33,a:0.06,s:0.30,sp:0.019},{yf:0.52,a:-0.06,s:0.26,sp:0.025},{yf:0.70,a:-0.18,s:0.24,sp:0.021},{yf:0.87,a:-0.30,s:0.22,sp:0.018}]
+  .forEach(({yf,a,s,sp},i)=>{
+    const fy=yf*H,hue=(tick*0.7+i*55+260)%360,angle=a+Math.sin(tick*sp+i*1.1)*s,sLen=W*1.1,op=0.24+bands.mid*0.14+beatPulse*0.10;
+    const g=ctx.createLinearGradient(0,0,0,sLen);
+    g.addColorStop(0,`hsla(${hue},100%,88%,${op})`);g.addColorStop(0.25,`hsla(${hue},100%,72%,${op*0.55})`);
+    g.addColorStop(0.55,`hsla(${hue},100%,55%,${op*0.12})`);g.addColorStop(0.78,'transparent');
+    ctx.save();ctx.translate(0,fy);ctx.rotate(Math.PI/2+angle);
+    ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(-1,0);ctx.lineTo(1,0);ctx.lineTo(15,sLen);ctx.lineTo(-15,sLen);ctx.closePath();ctx.fill();ctx.restore();
+    spotDot(3,fy,hue);
+  });
+
+  // Right wall: mirror
+  [{yf:0.15,a:-0.18,s:0.28,sp:0.022},{yf:0.33,a:-0.06,s:0.30,sp:0.019},{yf:0.52,a:0.06,s:0.26,sp:0.025},{yf:0.70,a:0.18,s:0.24,sp:0.021},{yf:0.87,a:0.30,s:0.22,sp:0.018}]
+  .forEach(({yf,a,s,sp},i)=>{
+    const fy=yf*H,hue=(tick*0.7+i*55+80)%360,angle=a+Math.sin(tick*sp+i*1.1+4)*s,sLen=W*1.1,op=0.24+bands.mid*0.14+beatPulse*0.10;
+    const g=ctx.createLinearGradient(0,0,0,sLen);
+    g.addColorStop(0,`hsla(${hue},100%,88%,${op})`);g.addColorStop(0.25,`hsla(${hue},100%,72%,${op*0.55})`);
+    g.addColorStop(0.55,`hsla(${hue},100%,55%,${op*0.12})`);g.addColorStop(0.78,'transparent');
+    ctx.save();ctx.translate(W,fy);ctx.rotate(-Math.PI/2+angle);
+    ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(-1,0);ctx.lineTo(1,0);ctx.lineTo(15,sLen);ctx.lineTo(-15,sLen);ctx.closePath();ctx.fill();ctx.restore();
+    spotDot(W-3,fy,hue);
+  });
+}
+
+// ── Disco ball (full mode / laser mode) ───────────────────────────────────
+function drawDiscoBall(cx,cy,R,colorShift){
+  ctx.save();ctx.strokeStyle='rgba(200,200,200,0.3)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,cy-R);ctx.stroke();ctx.restore();
+
+  // Sphere body
+  ctx.save();ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);
+  const body=ctx.createRadialGradient(cx-R*0.3,cy-R*0.35,R*0.05,cx,cy,R);
+  body.addColorStop(0,'rgba(55,55,75,0.65)');body.addColorStop(0.55,'rgba(12,12,22,0.88)');body.addColorStop(1,'rgba(0,0,0,0.96)');
+  ctx.fillStyle=body;ctx.fill();ctx.restore();
+
+  // Ambient glow
+  const glow=ctx.createRadialGradient(cx,cy,R*0.4,cx,cy,R*2.2);
+  glow.addColorStop(0,`hsla(${colorShift},60%,80%,${0.05+beatPulse*0.07})`);glow.addColorStop(1,'transparent');
+  ctx.fillStyle=glow;ctx.beginPath();ctx.arc(cx,cy,R*2.2,0,Math.PI*2);ctx.fill();
+
+  // Tiles
+  const spin=tick*0.045;
+  const tileRows=16,tileCols=24;
+  for(let r=1;r<tileRows-1;r++){
+    const phi=(r/(tileRows-1))*Math.PI;
+    const sinPhi=Math.sin(phi),cosPhi=Math.cos(phi);
+    const cols=Math.max(4,Math.round(tileCols*sinPhi));
+    for(let c=0;c<cols;c++){
+      const theta=(c/cols)*Math.PI*2+spin+r*0.14;
+      const sx=sinPhi*Math.cos(theta),sy=-cosPhi,sz=sinPhi*Math.sin(theta);
+      if(sz<0.02)continue;
+      const depth=sz;
+      const px=cx+sx*R*0.96,py=cy+sy*R*0.96;
+      const ts=R*0.10*(0.5+depth*0.5),tw=ts*1.25,th=ts*0.85;
+      const tileHue=(tick*2.5+r*22+c*17)%360;
+      const lit=Math.round(48+depth*34);
+      const spec=Math.max(0,-sx*0.4-sy*0.7+sz*0.2);
+      ctx.save();ctx.translate(px,py);ctx.rotate(theta*0.4+spin*0.3);
+      ctx.shadowColor='rgba(0,0,0,0.75)';ctx.shadowBlur=3;ctx.shadowOffsetX=1;ctx.shadowOffsetY=1;
+      ctx.fillStyle=`hsla(${tileHue},100%,${lit}%,${0.55+depth*0.45})`;
+      ctx.fillRect(-tw/2,-th/2,tw,th);
+      if(spec>0.5){
+        ctx.shadowBlur=0;ctx.shadowOffsetX=0;ctx.shadowOffsetY=0;
+        ctx.fillStyle=`rgba(255,255,255,${Math.min(0.9,(spec-0.5)*1.8)})`;
+        ctx.fillRect(-tw*0.45,-th*0.45,tw*0.5,th*0.5);
+      }
+      ctx.restore();
+
+    }
+  }
+
+  // Central bulb — tiny dot only
+  const bulbR=R*0.055;
+  ctx.save();ctx.shadowColor='rgba(255,255,200,0.9)';ctx.shadowBlur=6;
+  ctx.beginPath();ctx.arc(cx,cy,bulbR,0,Math.PI*2);ctx.fillStyle='rgba(255,255,230,0.85)';ctx.fill();ctx.restore();
+}
+
+// ── Spectrum bars ──────────────────────────────────────────────────────────
+function drawSpectrumBars(){
+  const count = 120;
+  const slotW = W / count;
+  const bw = slotW * 0.62;
+  // Mirror the spectrum: left half = low->high, right half = high->low
+  // This guarantees BOTH edges are always active (bass on edges, highs in middle)
+  const usableBins = Math.floor(freqData.length * 0.75);
+  const half = Math.floor(count / 2);
+  for(let i = 0; i < count; i++){
+    // Map so bass is on far left AND far right, highs in centre
+    const mirror = i < half ? i : count - 1 - i;
+    const binStart = Math.floor((mirror / half) * usableBins);
+    const binEnd   = Math.floor(((mirror + 1) / half) * usableBins);
+    const span = Math.max(1, binEnd - binStart);
+    let val = 0;
+    for(let j = binStart; j < binStart + span; j++) val += freqData[j] || 0;
+    val = val / (span * 255);
+    const bh = val * H * 0.55;
+    const x = i * slotW;
+    const hue = (tick * 0.3 + (i / count) * 360 + 40) % 360;
+    const g = ctx.createLinearGradient(0, H, 0, H - bh);
+    g.addColorStop(0,   `hsla(${hue},100%,50%,0.9)`);
+    g.addColorStop(0.6, `hsla(${(hue+40)%360},100%,65%,0.8)`);
+    g.addColorStop(1,   `hsla(${(hue+80)%360},100%,85%,0.6)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(x, H - bh, bw, bh);
+    if(val > 0.55){
+      ctx.fillStyle = `hsla(${hue},100%,95%,0.95)`;
+      ctx.fillRect(x, H - bh - 4, bw, 3);
+    }
+  }
+}
+
+// ── Lasers ─────────────────────────────────────────────────────────────────
+function drawLasers(bands){
+  const cx=W*0.5,cy=H*0.04;
+  for(const l of LASERS){
+    l.angle+=l.speed*(1+bands.bass*3);l.hue=(l.hue+0.8)%360;
+    const len=Math.max(W,H)*2;
+    ctx.save();ctx.beginPath();ctx.moveTo(cx,cy);
+    ctx.lineTo(cx+Math.cos(l.angle)*len,cy+Math.sin(l.angle)*len);
+    ctx.strokeStyle=`hsla(${l.hue},100%,70%,${0.35+bands.mid*0.3})`;
+    ctx.lineWidth=l.width+bands.bass*4+beatPulse*3;
+    ctx.shadowColor=`hsla(${l.hue},100%,70%,0.8)`;ctx.shadowBlur=12;ctx.stroke();ctx.restore();
+  }
+  ctx.beginPath();ctx.arc(cx,cy,6+beatPulse*8,0,Math.PI*2);
+  ctx.fillStyle='#fff';ctx.shadowColor='#fff';ctx.shadowBlur=20;ctx.fill();ctx.shadowBlur=0;
+}
+
+// ── Particles ──────────────────────────────────────────────────────────────
+function drawParticles(bands){
+  for(const p of PARTICLES){
+    p.life+=0.008+bands.bass*0.018;
+    if(p.life>p.maxLife){p.x=Math.random();p.y=0.85+Math.random()*0.15;p.vx=(Math.random()-0.5)*0.003;p.vy=-(0.002+Math.random()*0.005);p.hue=Math.random()*360;p.life=0;p.maxLife=0.5+Math.random()*0.5;}
+    p.x+=p.vx*(1+bands.bass*3);p.y+=p.vy*(1+bands.bass*3);
+    const t=p.life/p.maxLife;p.alpha=t<0.1?t*10:(t>0.8?(1-t)*5:1);
+    ctx.beginPath();ctx.arc(p.x*W,p.y*H,p.size*(1+beatPulse*0.5),0,Math.PI*2);
+    ctx.fillStyle=`hsla(${p.hue},100%,75%,${p.alpha*0.7})`;ctx.fill();
+  }
+}
+
+// ── Circle visualizer ──────────────────────────────────────────────────────
+function drawCircleViz(bands){
+  const cx=W/2,cy=H/2,S=Math.min(W,H);
+  const baseR=S*0.23,maxBar=S*0.38,count=80;
+  const colorShift=(tick*0.6)%360;
+
+  const usable=Math.floor(freqData.length*0.8);
+  const raw=[];
+  for(let i=0;i<count;i++){
+    const idx=Math.floor((i/count)*usable),span=Math.max(1,Math.floor(usable/count));
+    let s=0;for(let j=0;j<span;j++)s+=freqData[Math.min(idx+j,freqData.length-1)]||0;
+    raw.push(s/(span*255));
+  }
+  const half=raw.slice(0,count/2);
+  const mir=[...half,...half.slice().reverse()];
+  const vals=mir.map((v,i)=>{
+    const a=mir[(i-2+count)%count],b=mir[(i-1+count)%count],c=mir[(i+1)%count],d=mir[(i+2)%count];
+    return a*0.1+b*0.2+v*0.4+c*0.2+d*0.1;
+  });
+  const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+
+  // === Wide outer bloom pulse ===
+  const bloomR = baseR + maxBar * 1.8;
+  const bl2 = ctx.createRadialGradient(cx,cy,baseR*0.3,cx,cy,bloomR*1.3);
+  bl2.addColorStop(0,`hsla(${colorShift},100%,65%,${0.08+avg*0.18+beatPulse*0.10})`);
+  bl2.addColorStop(0.4,`hsla(${(colorShift+90)%360},100%,55%,${0.04+avg*0.08})`);
+  bl2.addColorStop(1,'transparent');
+  ctx.fillStyle=bl2;ctx.beginPath();ctx.arc(cx,cy,bloomR*1.3,0,Math.PI*2);ctx.fill();
+
+  // === Rotating halo rings behind bars ===
+  for(let ring=0;ring<3;ring++){
+    const rOff = ring*22, rAlpha=0.06+ring*0.03+beatPulse*0.06;
+    ctx.save();
+    ctx.shadowColor=`hsla(${(colorShift+ring*120)%360},100%,70%,0.6)`;ctx.shadowBlur=14;
+    ctx.beginPath();ctx.arc(cx,cy,baseR+ring*8,0,Math.PI*2);
+    ctx.strokeStyle=`hsla(${(colorShift+ring*120)%360},100%,68%,${rAlpha})`;ctx.lineWidth=1;ctx.stroke();
+    ctx.restore();
+  }
+
+  // === Bars ===
+  const barW=(2*Math.PI*baseR/count)*0.38;
+  for(let i=0;i<count;i++){
+    const v=vals[i],angle=(i/count)*Math.PI*2-Math.PI/2;
+    const barLen=Math.max(3,v*maxBar*(1+beatPulse*0.55));
+    const hue=(colorShift+(i/count)*360)%360;
+    const alpha=0.55+v*0.45;
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(angle);
+
+    const bw=Math.max(2.5,barW*(0.45+v*0.75));
+    // Double glow pass for neon effect
+    ctx.shadowColor=`hsla(${hue},100%,70%,1)`;ctx.shadowBlur=22+v*12;
+    const gr=ctx.createLinearGradient(0,-baseR-barLen,0,-baseR);
+    gr.addColorStop(0,`hsla(${hue},100%,92%,1)`);
+    gr.addColorStop(0.3,`hsla(${hue},100%,68%,${alpha})`);
+    gr.addColorStop(0.8,`hsla(${(hue+50)%360},100%,45%,${alpha*0.6})`);
+    gr.addColorStop(1,`hsla(${(hue+80)%360},100%,30%,${alpha*0.2})`);
+    ctx.fillStyle=gr;ctx.beginPath();ctx.roundRect(-bw/2,-baseR-barLen,bw,barLen,bw/2);ctx.fill();
+    ctx.shadowBlur=0;
+
+    // Glowing tip cap
+    if(v>0.12){
+      ctx.shadowColor=`hsla(${hue},100%,95%,1)`;ctx.shadowBlur=16+v*10;
+      ctx.beginPath();ctx.arc(0,-baseR-barLen,bw*0.6,0,Math.PI*2);
+      ctx.fillStyle=`hsla(${hue},100%,98%,${Math.min(1,v*1.8)})`;ctx.fill();
+      ctx.shadowBlur=0;
+    }
+    ctx.restore();
+  }
+
+  // === Triple neon ring (layered glow) ===
+  for(let pass=0;pass<3;pass++){
+    const lw=[5,3,1.5][pass], blur=[30,16,8][pass], alpha=[0.35,0.55,0.85][pass];
+    ctx.save();
+    ctx.shadowColor=`hsla(${colorShift},100%,75%,1)`;ctx.shadowBlur=blur;
+    ctx.beginPath();ctx.arc(cx,cy,baseR,0,Math.PI*2);
+    ctx.strokeStyle=`hsla(${colorShift},100%,78%,${alpha})`;ctx.lineWidth=lw;ctx.stroke();
+    ctx.restore();
+  }
+
+  // === Inner dark fill with colour tint ===
+  const ig=ctx.createRadialGradient(cx,cy,0,cx,cy,baseR);
+  ig.addColorStop(0,`hsla(${(colorShift+200)%360},50%,10%,0.65)`);
+  ig.addColorStop(0.55,`hsla(${colorShift},35%,6%,0.55)`);
+  ig.addColorStop(1,'transparent');
+  ctx.fillStyle=ig;ctx.beginPath();ctx.arc(cx,cy,baseR,0,Math.PI*2);ctx.fill();
+
+  // Disco ball inside
+  const ballR=baseR*0.50;
+  drawDiscoBall(cx,cy,ballR,colorShift);
+
+  // Beat burst
+  if(beatPulse>0.1){
+    for(let r=0;r<16;r++){
+      const a=(r/16)*Math.PI*2+tick*0.04,rLen=ballR*0.88*beatPulse;
+      ctx.save();ctx.translate(cx,cy);ctx.rotate(a);
+      const rg=ctx.createLinearGradient(0,0,0,-rLen);
+      rg.addColorStop(0,`hsla(${(colorShift+r*22)%360},100%,80%,${beatPulse*0.7})`);rg.addColorStop(1,'transparent');
+      ctx.strokeStyle=rg;ctx.lineWidth=2;ctx.shadowColor=`hsla(${(colorShift+r*22)%360},100%,80%,1)`;ctx.shadowBlur=10;
+      ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-rLen);ctx.stroke();ctx.restore();
+    }
+  }
+}
+
+
+
+// ── Main loop ──────────────────────────────────────────────────────────────
+function draw(){
+  if(!running)return;
+  requestAnimationFrame(draw);tick++;
+  analyser.getByteFrequencyData(freqData);analyser.getByteTimeDomainData(waveData);
+  const bands=getFreqBands();detectBeat(bands.bass);
+  const p=beatPulse*0.15;
+  ctx.fillStyle=`rgb(${Math.round(p*30)},0,${Math.round(p*20)})`;ctx.fillRect(0,0,W,H);
+
+  const cs=(tick*0.5)%360;
+  if(mode==='full'){drawAllSpotlights(bands);drawParticles(bands);drawLasers(bands);drawDiscoBall(W*0.5,H*0.18,Math.min(W,H)*(0.10+beatPulse*0.015),cs);drawSpectrumBars();}
+  else if(mode==='bars'){drawSpectrumBars();}
+  else if(mode==='circle'){drawAllSpotlights(bands);drawCircleViz(bands);}
+  else if(mode==='laser'){drawLasers(bands);drawDiscoBall(W*0.5,H*0.18,Math.min(W,H)*(0.10+beatPulse*0.015),cs);}
+}
+
+// ── Presenter mode ────────────────────────────────────────────────────────
+const presenterPanel = document.getElementById('presenter-panel');
+const overlayText    = document.getElementById('overlay-text');
+const ppMain  = document.getElementById('pp-main');
+const ppSub   = document.getElementById('pp-sub');
+const ppPos   = document.getElementById('pp-pos');
+const ppAnim  = document.getElementById('pp-anim');
+const ppShow  = document.getElementById('pp-show');
+const ppHide  = document.getElementById('pp-hide');
+const ppClose = document.getElementById('pp-close');
+let selectedColour = 'rainbow';
+
+document.querySelectorAll('.pp-swatch').forEach(s => {
+  s.addEventListener('click', () => {
+    document.querySelectorAll('.pp-swatch').forEach(x => x.classList.remove('active'));
+    s.classList.add('active');
+    selectedColour = s.dataset.colour;
+  });
+});
+
+function showOverlay() {
+  const main = ppMain.value.trim();
+  const sub  = ppSub.value.trim();
+  if (!main && !sub) return;
+  overlayText.innerHTML = (main ? `<span class="ov-main">${main}</span>` : '') + (sub ? `<span class="ov-sub">${sub}</span>` : '');
+  overlayText.className = '';
+  overlayText.classList.add(`pos-${ppPos.value}`, `colour-${selectedColour}`);
+  overlayText.style.display = 'block';
+  overlayText.style.animation = 'none';
+  void overlayText.offsetWidth; // reflow
+  const anim = ppAnim.value;
+  const pos  = ppPos.value;
+  if (anim === 'fade')   overlayText.style.animation = 'ov-fade 0.6s ease forwards';
+  if (anim === 'slide')  overlayText.style.animation = pos === 'centre' ? 'ov-slide 0.6s ease forwards' : 'ov-slide-top 0.6s ease forwards';
+  if (anim === 'pulse')  overlayText.style.animation = 'ov-pulse 1.4s ease-in-out infinite';
+  if (anim === 'glitch') overlayText.style.animation = 'ov-glitch 0.6s ease forwards';
+}
+
+ppShow.addEventListener('click', showOverlay);
+ppHide.addEventListener('click', () => { overlayText.style.display = 'none'; });
+ppClose.addEventListener('click', () => { presenterPanel.style.display = 'none'; });
+ppMain.addEventListener('keydown', e => { if (e.key === 'Enter') showOverlay(); });
+ppSub.addEventListener('keydown',  e => { if (e.key === 'Enter') showOverlay(); });
+
+// P key toggles presenter panel
+document.addEventListener('keydown', e => {
+  if ((e.key === 'p' || e.key === 'P') && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) {
+    presenterPanel.style.display = presenterPanel.style.display === 'flex' ? 'none' : 'block';
+    if (presenterPanel.style.display === 'block') setTimeout(() => ppMain.focus(), 50);
+  }
+});
+
+// Idle
+(function idle(){
+  if(running)return;requestAnimationFrame(idle);tick++;
+  ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+  const ib={sub:0.1,bass:0.15+Math.sin(tick*0.03)*0.08,mid:0.1,high:0.05};
+  beatPulse=Math.abs(Math.sin(tick*0.025))*0.3;
+  const cs=(tick*0.5)%360;
+  drawAllSpotlights(ib);drawDiscoBall(W*0.5,H*0.18,Math.min(W,H)*(0.10),cs);
+})();
+</script>
+</body>
+</html>

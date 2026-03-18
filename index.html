@@ -5,11 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DISCO VISUALIZER</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Anton&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#000; overflow:hidden; width:100vw; height:100vh; font-family:'Bebas Neue',sans-serif; cursor:none; }
-  canvas { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; }
-  #ui { position:fixed; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:10; background:rgba(0,0,0,0.88); transition:opacity 0.8s ease; }
+  body { background:#000; overflow:hidden; width:100vw; height:100vh; font-family:'Bebas Neue',sans-serif; cursor:default; }
+  canvas { position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; pointer-events:none; }
+  #ui { position:fixed; top:0; left:0; width:100%; height:100%; display:none; flex-direction:column; align-items:center; justify-content:center; z-index:10; background:rgba(0,0,0,0.88); transition:opacity 0.8s ease; }
   #ui.hidden { opacity:0; pointer-events:none; }
   .ui-title { font-family:'Anton',sans-serif; font-size:clamp(48px,10vw,120px); letter-spacing:0.15em; background:linear-gradient(135deg,#ff2d78,#ff9a00,#ffe100,#00f5a0,#00d9f5,#b86bff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; text-align:center; line-height:1; margin-bottom:16px; animation:pulse-title 2s ease-in-out infinite; }
   @keyframes pulse-title { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.3)} }
@@ -21,6 +22,69 @@
   #hud.show { opacity:1; }
   .hud-btn { font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:0.2em; color:rgba(255,255,255,0.5); background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); padding:7px 14px; border-radius:6px; cursor:pointer; transition:all 0.2s; }
   .hud-btn:hover,.hud-btn.active { color:#fff; background:rgba(255,255,255,0.12); border-color:rgba(255,255,255,0.3); }
+
+  /* ── Login screen ── */
+  #login-screen {
+    display:flex; position:fixed; top:0; left:0; width:100%; height:100%; z-index:9999;
+    background:rgba(0,0,0,0.95); flex-direction:column; align-items:center; justify-content:center;
+    font-family:'Bebas Neue',sans-serif;
+  }
+  #login-screen.active { display:flex; }
+  #login-screen.hidden { display:none; }
+  .ls-title { font-family:'Anton',sans-serif; font-size:clamp(36px,8vw,90px); letter-spacing:0.15em;
+    background:linear-gradient(135deg,#ff2d78,#ff9a00,#ffe100,#00f5a0,#00d9f5,#b86bff);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+    margin-bottom:8px; text-align:center; }
+  .ls-sub { font-size:clamp(12px,2vw,20px); color:rgba(255,255,255,0.4); letter-spacing:0.3em; margin-bottom:36px; }
+  #ls-input { font-family:'Bebas Neue',sans-serif; font-size:clamp(20px,3vw,32px); letter-spacing:0.2em;
+    text-align:center; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.2);
+    color:#fff; padding:14px 28px; border-radius:10px; outline:none; width:min(380px,80vw);
+    text-transform:lowercase; }
+  #ls-input:focus { border-color:rgba(255,100,200,0.7); }
+  #ls-error { color:#ff4444; font-size:14px; letter-spacing:0.15em; margin-top:10px; min-height:20px; text-align:center; }
+  #ls-btn { font-family:'Bebas Neue',sans-serif; font-size:clamp(16px,2.5vw,24px); letter-spacing:0.3em;
+    color:#000; background:linear-gradient(135deg,#ff2d78,#b86bff); border:none;
+    padding:14px 52px; border-radius:100px; cursor:pointer; margin-top:20px; transition:transform 0.15s; }
+  #ls-btn:hover { transform:scale(1.04); }
+  #ls-slots { margin-top:28px; font-size:13px; color:rgba(255,255,255,0.3); letter-spacing:0.15em; text-align:center; }
+
+  /* ── Editor screen ── */
+  #editor-screen {
+    display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:9999;
+    background:#080410; overflow-y:auto; padding:32px 28px 48px;
+    font-family:'Bebas Neue',sans-serif;
+  }
+  #editor-screen.active { display:block; }
+  .ed-title { font-family:'Anton',sans-serif; font-size:clamp(28px,5vw,56px); letter-spacing:0.2em;
+    background:linear-gradient(135deg,#ff2d78,#b86bff); -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent; background-clip:text; margin-bottom:4px; }
+  .ed-welcome { font-size:14px; color:rgba(255,255,255,0.35); letter-spacing:0.2em; margin-bottom:28px; }
+  .ed-section { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:18px 20px; margin-bottom:16px; }
+  .ed-label { font-size:11px; letter-spacing:0.22em; color:rgba(255,255,255,0.38); margin-bottom:7px; }
+  #editor-screen input[type=text], #editor-screen select {
+    width:100%; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.15);
+    color:#fff; font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:0.1em;
+    padding:10px 14px; border-radius:8px; outline:none; }
+  #editor-screen input[type=text]:focus { border-color:rgba(255,100,200,0.6); }
+  #editor-screen select { cursor:pointer; font-size:15px; }
+  .ed-row { display:flex; gap:14px; margin-bottom:16px; }
+  .ed-col { flex:1; }
+  #ed-colours { display:flex; gap:10px; flex-wrap:wrap; margin-top:4px; }
+  .ed-swatch { width:32px; height:32px; border-radius:50%; cursor:pointer; border:2px solid transparent; transition:border-color 0.2s, transform 0.15s; }
+  .ed-swatch:hover { transform:scale(1.1); }
+  .ed-swatch.active { border-color:#fff; transform:scale(1.1); }
+  .ed-btns { display:flex; gap:12px; margin-top:20px; flex-wrap:wrap; }
+  .ed-btns button { font-family:'Bebas Neue',sans-serif; font-size:15px; letter-spacing:0.2em;
+    padding:12px 26px; border-radius:8px; border:none; cursor:pointer; transition:all 0.2s; flex:1; }
+  #ed-show { background:linear-gradient(135deg,#ff2d78,#b86bff); color:#fff; }
+  #ed-show:hover { filter:brightness(1.15); }
+  #ed-hide { background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:#fff; }
+  #ed-hide:hover { background:rgba(255,255,255,0.18); }
+  #ed-viewers { font-size:14px; color:rgba(255,255,255,0.5); letter-spacing:0.1em; min-height:24px; }
+  #ed-logout { font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:0.2em;
+    color:rgba(255,255,255,0.3); background:none; border:1px solid rgba(255,255,255,0.1);
+    padding:8px 20px; border-radius:6px; cursor:pointer; }
+  #ed-logout:hover { color:#fff; border-color:rgba(255,255,255,0.3); }
 
 
   /* ── Projection text overlay ── */
@@ -94,11 +158,76 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="ls-title">DISCO VISUALIZER</div>
+  <div class="ls-sub">ENTER YOUR USERNAME</div>
+  <input id="ls-input" type="text" placeholder="username" maxlength="32" autocomplete="off" spellcheck="false">
+  <div id="ls-error"></div>
+  <button id="ls-btn" onclick="login()">ENTER</button>
+  <div id="ls-slots"></div>
+</div>
+
+<!-- VIEWER: mic start screen -->
 <div id="ui">
   <div class="ui-title">DISCO<br>VISUALIZER</div>
   <div class="ui-sub">live music · real-time · mainstage</div>
   <button class="start-btn" id="startBtn">TAP TO BEGIN</button>
   <div class="err-msg" id="errMsg">MICROPHONE ACCESS DENIED<br><span style="font-size:0.75em;color:rgba(255,100,100,0.8)">Allow mic in your browser settings, then refresh</span></div>
+</div>
+
+<!-- EDITOR SCREEN (replaces visualizer for editors) -->
+<div id="editor-screen">
+  <div class="ed-title">EDITOR PANEL</div>
+  <div class="ed-welcome" id="ed-welcome"></div>
+
+  <div class="ed-section">
+    <div class="ed-label">MAIN TEXT</div>
+    <input id="ed-main" type="text" placeholder="e.g. HAPPY BIRTHDAY SARAH" maxlength="60">
+    <div class="ed-label" style="margin-top:12px">SUBTITLE</div>
+    <input id="ed-sub" type="text" placeholder="e.g. Table 3 to the dancefloor!" maxlength="80">
+  </div>
+
+  <div class="ed-row">
+    <div class="ed-col">
+      <div class="ed-label">POSITION</div>
+      <select id="ed-pos">
+        <option value="centre">Centre</option>
+        <option value="top">Top</option>
+        <option value="bottom">Bottom</option>
+      </select>
+    </div>
+    <div class="ed-col">
+      <div class="ed-label">ANIMATION</div>
+      <select id="ed-anim">
+        <option value="fade">Fade</option>
+        <option value="slide">Slide Up</option>
+        <option value="pulse">Pulse</option>
+        <option value="glitch">Glitch</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="ed-label" style="margin-top:16px">COLOUR</div>
+  <div id="ed-colours">
+    <div class="ed-swatch active" data-colour="rainbow" style="background:linear-gradient(135deg,#ff2d78,#ffec40,#00f5a0,#b86bff)" title="Rainbow"></div>
+    <div class="ed-swatch" data-colour="white"   style="background:#fff" title="White"></div>
+    <div class="ed-swatch" data-colour="gold"    style="background:linear-gradient(135deg,#ffe100,#ff9a00)" title="Gold"></div>
+    <div class="ed-swatch" data-colour="pink"    style="background:linear-gradient(135deg,#ff2d78,#b86bff)" title="Pink"></div>
+    <div class="ed-swatch" data-colour="cyan"    style="background:linear-gradient(135deg,#00d9f5,#00f5a0)" title="Cyan"></div>
+  </div>
+
+  <div class="ed-btns">
+    <button id="ed-show">SHOW ON SCREEN</button>
+    <button id="ed-hide">HIDE TEXT</button>
+  </div>
+
+  <div class="ed-section" style="margin-top:24px">
+    <div class="ed-label">CONNECTED VIEWERS</div>
+    <div id="ed-viewers"></div>
+  </div>
+
+  <button id="ed-logout" style="margin-top:28px">LOG OUT</button>
 </div>
 <div id="hud">
   <button class="hud-btn active" data-mode="full">FULL</button>
@@ -109,49 +238,7 @@
 </div>
 
 
-<!-- Text overlay shown on projection -->
 <div id="overlay-text"></div>
-
-<!-- Presenter panel (only on this screen) -->
-<div id="presenter-panel">
-  <div id="pp-title">PRESENTER MODE</div>
-  <div id="pp-row">
-    <div class="pp-col">
-      <label class="pp-label">MAIN TEXT</label>
-      <input id="pp-main" type="text" placeholder="e.g. HAPPY BIRTHDAY SARAH" maxlength="60">
-      <label class="pp-label" style="margin-top:10px">SUBTITLE</label>
-      <input id="pp-sub" type="text" placeholder="e.g. Table 3 to the dancefloor!" maxlength="80">
-    </div>
-    <div class="pp-col pp-col-right">
-      <label class="pp-label">POSITION</label>
-      <select id="pp-pos">
-        <option value="centre">Centre</option>
-        <option value="top">Top</option>
-        <option value="bottom">Bottom</option>
-      </select>
-      <label class="pp-label" style="margin-top:10px">ANIMATION</label>
-      <select id="pp-anim">
-        <option value="fade">Fade</option>
-        <option value="slide">Slide Up</option>
-        <option value="pulse">Pulse</option>
-        <option value="glitch">Glitch</option>
-      </select>
-      <label class="pp-label" style="margin-top:10px">COLOUR</label>
-      <div id="pp-colours">
-        <div class="pp-swatch active" data-colour="rainbow" style="background:linear-gradient(135deg,#ff2d78,#ffec40,#00f5a0,#00d9f5,#b86bff)"></div>
-        <div class="pp-swatch" data-colour="white" style="background:#fff"></div>
-        <div class="pp-swatch" data-colour="gold" style="background:linear-gradient(135deg,#ffe100,#ff9a00)"></div>
-        <div class="pp-swatch" data-colour="pink" style="background:linear-gradient(135deg,#ff2d78,#b86bff)"></div>
-        <div class="pp-swatch" data-colour="cyan" style="background:linear-gradient(135deg,#00d9f5,#00f5a0)"></div>
-      </div>
-    </div>
-  </div>
-  <div id="pp-btns">
-    <button id="pp-show">SHOW ON SCREEN</button>
-    <button id="pp-hide">HIDE</button>
-    <button id="pp-close">CLOSE PRESENTER</button>
-  </div>
-</div>
 
 <script>
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
@@ -174,6 +261,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='3') switchMode('circle');
   if(e.key==='4') switchMode('laser');
 });
+
 function switchMode(m){
   mode=m;
   document.querySelectorAll('.hud-btn[data-mode]').forEach(b=>{
@@ -519,57 +607,170 @@ function draw(){
   else if(mode==='laser'){drawLasers(bands);drawDiscoBall(W*0.5,H*0.18,Math.min(W,H)*(0.10+beatPulse*0.015),cs);}
 }
 
-// ── Presenter mode ────────────────────────────────────────────────────────
-const presenterPanel = document.getElementById('presenter-panel');
-const overlayText    = document.getElementById('overlay-text');
-const ppMain  = document.getElementById('pp-main');
-const ppSub   = document.getElementById('pp-sub');
-const ppPos   = document.getElementById('pp-pos');
-const ppAnim  = document.getElementById('pp-anim');
-const ppShow  = document.getElementById('pp-show');
-const ppHide  = document.getElementById('pp-hide');
-const ppClose = document.getElementById('pp-close');
-let selectedColour = 'rainbow';
+// ── Supabase config — replace with YOUR project values ──────────────────
+const SUPABASE_URL    = 'https://rklvtmxjzugcjznxczxa.supabase.co';
+const SUPABASE_ANON   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJrbHZ0bXhqenVnY2p6bnhjenhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMjk3MTMsImV4cCI6MjA4ODYwNTcxM30.RaAtGYahS1lHT7U7VH8wbbaQ1HHYqO8TBBMMtudfkRg';
 
-document.querySelectorAll('.pp-swatch').forEach(s => {
+let supabase = null;
+
+function initSupabase() {
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+}
+
+// ── User system ───────────────────────────────────────────────────────────
+const MAX_PER_ROLE = 5;
+const loginScreen  = document.getElementById('login-screen');
+const editorScreen = document.getElementById('editor-screen');
+const lsInput      = document.getElementById('ls-input');
+const lsBtn        = document.getElementById('ls-btn');
+const lsError      = document.getElementById('ls-error');
+const lsSlots      = document.getElementById('ls-slots');
+const edWelcome    = document.getElementById('ed-welcome');
+const edViewers    = document.getElementById('ed-viewers');
+const overlayText  = document.getElementById('overlay-text');
+
+let currentUser = null;
+let currentRole = null;
+let edColour    = 'rainbow';
+let realtimeSub = null;
+let pollTimer   = null;
+
+function updateSlots(editors, viewers) {
+  const eCount = editors || 0;
+  const vCount = viewers || 0;
+  lsSlots.innerHTML =
+    `<span style="color:rgba(255,100,200,0.6)">EDITOR</span> ${eCount}/${MAX_PER_ROLE} &nbsp;·&nbsp; ` +
+    `<span style="color:rgba(0,217,245,0.6)">VIEWER</span> ${vCount}/${MAX_PER_ROLE}`;
+}
+
+async function getSlotCounts() {
+  const { data } = await supabase.from('users').select('role');
+  if (!data) return { editor: 0, viewer: 0 };
+  return {
+    editor: data.filter(r => r.role === 'editor').length,
+    viewer: data.filter(r => r.role === 'viewer').length
+  };
+}
+
+window.login = async function() {
+  const name = lsInput.value.trim().toLowerCase();
+  if (!name) { lsError.textContent = 'ENTER A USERNAME'; return; }
+  if (name !== 'editor' && name !== 'viewer') {
+    lsError.textContent = 'TYPE "EDITOR" OR "VIEWER"';
+    return;
+  }
+  const role = name;
+  currentUser = name;
+  currentRole = role;
+  lsError.textContent = '';
+  loginScreen.classList.add('hidden');
+
+  // Try to register in Supabase but don't block on failure
+  try {
+    await supabase.from('users').upsert(
+      { username: name, role, joined_at: new Date().toISOString() },
+      { onConflict: 'username' }
+    );
+  } catch(e) { console.warn('Supabase upsert failed', e); }
+
+  window.addEventListener('beforeunload', window.logout);
+
+  if (role === 'editor') {
+    editorScreen.classList.add('active');
+    edWelcome.textContent = 'WELCOME, EDITOR';
+    try {
+      realtimeSub = supabase.channel('overlay-channel')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'overlay' }, payload => {
+          applyOverlay(payload.new);
+        }).subscribe();
+      const { data: vData } = await supabase.from('users').select('username').eq('role','viewer');
+      edViewers.textContent = vData && vData.length ? vData.map(r=>r.username.toUpperCase()).join(', ') : 'NO VIEWERS CONNECTED';
+      const { data: ov } = await supabase.from('overlay').select('*').eq('id',1).single();
+      if (ov) applyOverlay(ov);
+    } catch(e) { console.warn('Supabase editor setup failed', e); }
+  } else {
+    ui.style.display = 'flex';
+    ui.classList.remove('hidden');
+    try {
+      realtimeSub = supabase.channel('overlay-channel')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'overlay' }, payload => {
+          applyOverlay(payload.new);
+        }).subscribe();
+      const { data: ov } = await supabase.from('overlay').select('*').eq('id',1).single();
+      if (ov) applyOverlay(ov);
+    } catch(e) { console.warn('Supabase viewer setup failed', e); }
+  }
+};
+
+window.logout = async function logout() {
+  if (!currentUser) return;
+  if (realtimeSub) supabase.removeChannel(realtimeSub);
+  clearInterval(pollTimer);
+  await supabase.from('users').delete().eq('username', currentUser);
+  currentUser = null; currentRole = null;
+  editorScreen.classList.remove('active');
+  ui.style.display = 'none';
+  overlayText.style.display = 'none';
+  loginScreen.classList.remove('hidden');
+  lsInput.value = '';
+}
+
+// Editor controls
+document.querySelectorAll('.ed-swatch').forEach(s => {
   s.addEventListener('click', () => {
-    document.querySelectorAll('.pp-swatch').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.ed-swatch').forEach(x => x.classList.remove('active'));
     s.classList.add('active');
-    selectedColour = s.dataset.colour;
+    edColour = s.dataset.colour;
   });
 });
 
-function showOverlay() {
-  const main = ppMain.value.trim();
-  const sub  = ppSub.value.trim();
+document.getElementById('ed-show').addEventListener('click', pushOverlay);
+document.getElementById('ed-hide').addEventListener('click', async () => {
+  await supabase.from('overlay').upsert({ id: 1, visible: false }, { onConflict: 'id' });
+  applyOverlay({ visible: false });
+});
+document.getElementById('ed-logout').addEventListener('click', logout);
+document.getElementById('ed-main').addEventListener('keydown', e => { if(e.key==='Enter') pushOverlay(); });
+document.getElementById('ed-sub').addEventListener('keydown',  e => { if(e.key==='Enter') pushOverlay(); });
+
+async function pushOverlay() {
+  const main = document.getElementById('ed-main').value.trim();
+  const sub  = document.getElementById('ed-sub').value.trim();
   if (!main && !sub) return;
-  overlayText.innerHTML = (main ? `<span class="ov-main">${main}</span>` : '') + (sub ? `<span class="ov-sub">${sub}</span>` : '');
-  overlayText.className = '';
-  overlayText.classList.add(`pos-${ppPos.value}`, `colour-${selectedColour}`);
-  overlayText.style.display = 'block';
-  overlayText.style.animation = 'none';
-  void overlayText.offsetWidth; // reflow
-  const anim = ppAnim.value;
-  const pos  = ppPos.value;
-  if (anim === 'fade')   overlayText.style.animation = 'ov-fade 0.6s ease forwards';
-  if (anim === 'slide')  overlayText.style.animation = pos === 'centre' ? 'ov-slide 0.6s ease forwards' : 'ov-slide-top 0.6s ease forwards';
-  if (anim === 'pulse')  overlayText.style.animation = 'ov-pulse 1.4s ease-in-out infinite';
-  if (anim === 'glitch') overlayText.style.animation = 'ov-glitch 0.6s ease forwards';
+  const o = {
+    id: 1, main, sub,
+    pos:    document.getElementById('ed-pos').value,
+    anim:   document.getElementById('ed-anim').value,
+    colour: edColour,
+    visible: true
+  };
+  applyOverlay(o);
+  await supabase.from('overlay').upsert(o, { onConflict: 'id' });
 }
 
-ppShow.addEventListener('click', showOverlay);
-ppHide.addEventListener('click', () => { overlayText.style.display = 'none'; });
-ppClose.addEventListener('click', () => { presenterPanel.style.display = 'none'; });
-ppMain.addEventListener('keydown', e => { if (e.key === 'Enter') showOverlay(); });
-ppSub.addEventListener('keydown',  e => { if (e.key === 'Enter') showOverlay(); });
+function applyOverlay(o) {
+  if (!o || !o.visible) { overlayText.style.display = 'none'; return; }
+  overlayText.innerHTML =
+    (o.main ? `<span class="ov-main">${o.main}</span>` : '') +
+    (o.sub  ? `<span class="ov-sub">${o.sub}</span>`   : '');
+  overlayText.className = '';
+  overlayText.classList.add(`pos-${o.pos||'centre'}`, `colour-${o.colour||'rainbow'}`);
+  overlayText.style.display = 'block';
+  overlayText.style.animation = 'none';
+  void overlayText.offsetWidth;
+  if (o.anim==='fade')   overlayText.style.animation='ov-fade 0.6s ease forwards';
+  if (o.anim==='slide')  overlayText.style.animation= o.pos==='centre'?'ov-slide 0.6s ease forwards':'ov-slide-top 0.6s ease forwards';
+  if (o.anim==='pulse')  overlayText.style.animation='ov-pulse 1.4s ease-in-out infinite';
+  if (o.anim==='glitch') overlayText.style.animation='ov-glitch 0.6s ease forwards';
+}
 
-// P key toggles presenter panel
-document.addEventListener('keydown', e => {
-  if ((e.key === 'p' || e.key === 'P') && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) {
-    presenterPanel.style.display = presenterPanel.style.display === 'flex' ? 'none' : 'block';
-    if (presenterPanel.style.display === 'block') setTimeout(() => ppMain.focus(), 50);
-  }
-});
+
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+initSupabase();
+lsBtn.addEventListener('click', login);
+lsInput.addEventListener('keydown', e => { if(e.key==='Enter') login(); });
+getSlotCounts().then(c => updateSlots(c.editor, c.viewer));
 
 // Idle
 (function idle(){
